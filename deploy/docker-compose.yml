@@ -1,0 +1,67 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres
+    container_name: postgres
+    environment:
+      - POSTGRES_DB=logistic-vehicle
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5436:5432"
+    restart: always
+    networks:
+      - mcs-network
+    volumes:
+      - postgres_data:/val/lib/postgresl
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  logistic-vehicle-migration:
+    image: migrate/migrate
+    container_name: logistic-vehicle-migration
+    restart: "no"
+    networks:
+      - mcs-network
+    volumes:
+      - ../src/infrastructure/migrations:/migrations
+    command:
+      [
+        "-path=/migrations/",
+        "-database",
+        "postgres://postgres:postgres@postgres:5432/postgres?sslmode=disable",
+        "up",
+      ]
+    depends_on:
+      postgres:
+        condition: service_healthy
+  logistic-vehicle-svc:
+    image: logistic-vehicle-svc
+    container_name: logistic-vehicle-svc
+    environment:
+      - LOG_LEVEL=debug
+      - HTTP_PORT=:7062
+      - GRPC_PORT=:7072
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_DATABASE=logistic-vehicle
+    depends_on:
+      - logistic-vehicle-migration
+    ports:
+      - "7062:7062"
+      - "7072:7072"
+    restart: always
+    networks: 
+      - mcs-network
+    volumes:
+      - ${PWD}/data:/data
+networks:
+  mcs-network:
+    external: true
+volumes:
+  postgres_data:
+    driver: local
